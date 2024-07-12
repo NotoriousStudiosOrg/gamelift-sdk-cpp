@@ -821,7 +821,7 @@ Internal::GameLiftServerState::StartMatchBackfill(const Aws::GameLift::Server::M
 
         return StartMatchBackfillOutcome(result);
     } else {
-        return StartMatchBackfillOutcome(GameLiftError(GAMELIFT_ERROR_TYPE::BAD_REQUEST_EXCEPTION));
+        return StartMatchBackfillOutcome(GameLiftError(rawResponse.GetError()));
     }
 }
 
