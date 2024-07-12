@@ -71,7 +71,7 @@ To build the server SDK, follow these instructions for your operating system:
    ```
 2. Make the solution and project files.
    ```
-   cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -S . -B ./cmake-build
+   cmake -G "Unix Makefiles" -DBUILD_FOR_UNREAL=1 -DCMAKE_BUILD_TYPE=Release -S . -B ./cmake-build
    ```
 3. Compile the solution.
    ```

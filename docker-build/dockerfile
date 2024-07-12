@@ -1,0 +1,8 @@
+FROM docker.io/library/amazonlinux:2023
+RUN yum -y install perl
+RUN yum -y group install "Development Tools"
+RUN yum -y install cmake
+# openssl version should always match UE version of SSL in Engine\Source\ThirdParty\OpenSSL
+ADD openssl-1.1.1t.tar.gz /tmp/openssl/
+WORKDIR /tmp/openssl/openssl-1.1.1t
+RUN ./config && make && make install
