@@ -13,6 +13,7 @@
 #include <aws/gamelift/internal/retry/JitteredGeometricBackoffRetryStrategy.h>
 #include <random>
 #include <thread>
+#include <spdlog/spdlog.h>
 
 namespace Aws {
 namespace GameLift {
@@ -29,6 +30,7 @@ void JitteredGeometricBackoffRetryStrategy::apply(const std::function<bool(void)
         } else {
             std::uniform_int_distribution<> intervalRange(m_minRetryDelayMs, retryIntervalMs);
             int currentInterval = intervalRange(randGenerator);
+            spdlog::warn("Sending Message Failed. Retrying in {} milliseconds...", currentInterval);
             std::this_thread::sleep_for(std::chrono::milliseconds(currentInterval));
             retryIntervalMs *= m_retryFactor;
         }

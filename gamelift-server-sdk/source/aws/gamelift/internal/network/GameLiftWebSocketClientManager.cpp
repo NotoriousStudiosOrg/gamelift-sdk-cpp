@@ -13,10 +13,9 @@
 #include <aws/gamelift/internal/GameLiftServerState.h>
 #include <aws/gamelift/internal/network/GameLiftWebSocketClientManager.h>
 
-#include <aws/gamelift/internal/retry/JitteredGeometricBackoffRetryStrategy.h>
-#include <aws/gamelift/internal/retry/RetryingCallable.h>
-
 #include <aws/gamelift/internal/model/response/WebSocketDescribePlayerSessionsResponse.h>
+
+#include <spdlog/spdlog.h>
 
 using namespace Aws::GameLift;
 
@@ -25,8 +24,8 @@ namespace GameLift {
 namespace Internal {
 
 GenericOutcome GameLiftWebSocketClientManager::Connect(std::string websocketUrl, const std::string &authToken, const std::string &processId,
-                                                       const std::string &hostId, const std::string &fleetId) {
-    printf("Connecting to GameLift WebSocket server. websocketUrl: %s, processId: %s, hostId: %s, fleetId: %s\n",
+                                                       const std::string &hostId, const std::string &fleetId, const std::map<std::string, std::string> &sigV4QueryParameters) {
+    spdlog::info("Connecting to GameLift WebSocket server. websocketUrl: {}, processId: {}, hostId: {}, fleetId: {}",
            websocketUrl.c_str(), processId.c_str(), hostId.c_str(), fleetId.c_str());
 
     // Due to the websocket library we're using, base URLs must end with a "/". Ensure that it is
@@ -37,15 +36,22 @@ GenericOutcome GameLiftWebSocketClientManager::Connect(std::string websocketUrl,
 
     // Build the WebSocket URI
     std::string sdkVersion = Server::GetSdkVersion().GetResult();
-    Uri uri = Uri::UriBuilder()
-                  .WithBaseUri(websocketUrl)
-                  .AddQueryParam(PID_KEY, processId)
-                  .AddQueryParam(SDK_VERSION_KEY, sdkVersion)
-                  .AddQueryParam(FLAVOR_KEY, GameLiftServerState::LANGUAGE)
-                  .AddQueryParam(AUTH_TOKEN_KEY, authToken)
-                  .AddQueryParam(COMPUTE_ID_KEY, hostId)
-                  .AddQueryParam(FLEET_ID_KEY, fleetId)
-                  .Build();
+    Uri::UriBuilder uriBuilder = Uri::UriBuilder()
+            .WithBaseUri(websocketUrl)
+            .AddQueryParam(PID_KEY, processId)
+            .AddQueryParam(SDK_VERSION_KEY, sdkVersion)
+            .AddQueryParam(FLAVOR_KEY, GameLiftServerState::LANGUAGE)
+            .AddQueryParam(COMPUTE_ID_KEY, hostId)
+            .AddQueryParam(FLEET_ID_KEY, fleetId);
+
+    if (!authToken.empty()) {
+        uriBuilder.AddQueryParam(AUTH_TOKEN_KEY, authToken);
+    } else if (!sigV4QueryParameters.empty()) {
+        for (auto sigV4QueryParameter: sigV4QueryParameters) {
+            uriBuilder.AddQueryParam(sigV4QueryParameter.first, sigV4QueryParameter.second);
+        }
+    }
+    Uri uri = uriBuilder.Build();
 
     // delegate to the websocket client wrapper to connect
     return m_webSocketClientWrapper->Connect(uri);
@@ -55,24 +61,7 @@ GenericOutcome GameLiftWebSocketClientManager::SendSocketMessage(Message &messag
     // Serialize the message
     std::string jsonMessage = message.Serialize();
 
-    GenericOutcome outcome;
-    // Delegate to the websocketClientWrapper to send the request and retry if possible
-    const std::function<bool(void)> &retriable = [&] {
-        outcome = m_webSocketClientWrapper->SendSocketMessage(message.GetRequestId(), jsonMessage);
-        return outcome.IsSuccess() || outcome.GetError().GetErrorType() != GAMELIFT_ERROR_TYPE::WEBSOCKET_RETRIABLE_SEND_MESSAGE_FAILURE;
-    };
-
-    // Jittered retry required because many requests can cause buffer to fill.
-    // If retries all happpen in sync, it can cause potential delays in recovery.
-    JitteredGeometricBackoffRetryStrategy retryStrategy;
-    RetryingCallable callable = RetryingCallable::Builder().WithRetryStrategy(&retryStrategy).WithCallable(retriable).Build();
-
-    callable.call();
-
-    if (outcome.GetError() == GAMELIFT_ERROR_TYPE::WEBSOCKET_RETRIABLE_SEND_MESSAGE_FAILURE) {
-        outcome = GenericOutcome(GAMELIFT_ERROR_TYPE::WEBSOCKET_SEND_MESSAGE_FAILURE);
-    }
-
+    GenericOutcome outcome = m_webSocketClientWrapper->SendSocketMessage(message.GetRequestId(), jsonMessage);
     return outcome;
 }
 

@@ -10,6 +10,7 @@
  *
  */
 
+#include "regex"
 #include "gtest/gtest.h"
 #include <aws/gamelift/common/GameLiftErrors.h>
 #include <aws/gamelift/common/Outcome.h>
@@ -46,6 +47,9 @@ static constexpr const char *URI_FLAVOR_KEY = "sdkLanguage";
 static constexpr const char *URI_AUTH_TOKEN_KEY = "Authorization";
 static constexpr const char *URI_COMPUTE_ID_KEY = "ComputeId";
 static constexpr const char *URI_FLEET_ID_KEY = "FleetId";
+
+static constexpr const char *AGENTLESS_CONTAINER_PROCESS_ID = "ManagedResource";
+static constexpr const char *UUID_REGEX = "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$";
 
 class GameLiftServerStateInitTest : public ::testing::Test {
 public:
@@ -95,6 +99,27 @@ public:
     GenericOutcome CaptureUri(const Uri &uri) {
         capturedUriString = uri.GetUriString();
         return GenericOutcome(nullptr);
+    }
+
+    std::string GetQueryParamValue(const std::string& uri, const std::string& param) {
+        std::size_t queryStart = uri.find('?');
+        if (queryStart == std::string::npos) {
+            return "";
+        }
+
+        std::size_t paramStart = uri.find(param + '=', queryStart + 1);
+        if (paramStart == std::string::npos) {
+            return "";
+        }
+
+        std::size_t valueStart = paramStart + param.length() + 1;
+
+        std::size_t valueEnd = uri.find('&', valueStart);
+        if (valueEnd == std::string::npos) {
+            valueEnd = uri.length();
+        }
+
+        return uri.substr(valueStart, valueEnd - valueStart);
     }
 
     char *GetEnv(const char *key) { return std::getenv(key); }
@@ -268,6 +293,24 @@ TEST_F(GameLiftServerStateInitTest, GIVEN_defaultServerParameters_WHEN_initializ
     // THEN
     EXPECT_EQ(expectedUri.GetUriString(), capturedUriString);
     EXPECT_TRUE(outcome.IsSuccess());
+}
+
+TEST_F(GameLiftServerStateInitTest, GIVEN_defaultServerParametersWithAgentlessContainerProcessId_WHEN_initializeNetworking_THEN_generateProcessId) {
+    // GIVEN
+    SetEnv(ENV_VAR_WEBSOCKET_URL, ENV_VAR_WEBSOCKET_URL_VAL);
+    SetEnv(ENV_VAR_AUTH_TOKEN, ENV_VAR_AUTH_TOKEN_VAL);
+    SetEnv(ENV_VAR_PROCESS_ID, AGENTLESS_CONTAINER_PROCESS_ID);
+    SetEnv(ENV_VAR_HOST_ID, ENV_VAR_HOST_ID_VAL);
+    SetEnv(ENV_VAR_FLEET_ID, ENV_VAR_FLEET_ID_VAL);
+
+    EXPECT_CALL(*mockWebSocketClientWrapper, Connect(testing::_)).Times(1).WillOnce(testing::Invoke(this, &GameLiftServerStateInitTest::CaptureUri));
+    //  WHEN
+    GenericOutcome outcome = serverState->InitializeNetworking(Aws::GameLift::Server::Model::ServerParameters());
+    // THEN
+    EXPECT_TRUE(outcome.IsSuccess());
+    std::string processIdValue = GetQueryParamValue(capturedUriString, URI_PID_KEY);
+    std::regex uuidRegex(UUID_REGEX);
+    EXPECT_TRUE(std::regex_match(processIdValue, uuidRegex));
 }
 
 } // namespace Test

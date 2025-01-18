@@ -12,6 +12,7 @@
 
 #include <aws/gamelift/internal/model/response/WebSocketGetFleetRoleCredentialsResponse.h>
 #include <aws/gamelift/internal/network/callback/GetFleetRoleCredentialsCallback.h>
+#include <spdlog/spdlog.h>
 
 using namespace Aws::GameLift;
 
@@ -19,6 +20,7 @@ namespace Aws {
 namespace GameLift {
 namespace Internal {
 GenericOutcome GetFleetRoleCredentialsCallback::OnGetFleetRoleCredentials(const std::string &data) {
+    spdlog::info("OnGetFleetRoleCredentials Received");
     auto *getFleetRoleCredentialsResponse = new WebSocketGetFleetRoleCredentialsResponse();
     Message *message = getFleetRoleCredentialsResponse;
     message->Deserialize(data);

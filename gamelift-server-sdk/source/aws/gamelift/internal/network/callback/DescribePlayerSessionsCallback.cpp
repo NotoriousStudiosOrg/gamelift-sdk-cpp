@@ -12,6 +12,7 @@
 
 #include <aws/gamelift/internal/model/response/WebSocketDescribePlayerSessionsResponse.h>
 #include <aws/gamelift/internal/network/callback/DescribePlayerSessionsCallback.h>
+#include <spdlog/spdlog.h>
 
 using namespace Aws::GameLift;
 
@@ -19,6 +20,7 @@ namespace Aws {
 namespace GameLift {
 namespace Internal {
 GenericOutcome DescribePlayerSessionsCallback::OnDescribePlayerSessions(const std::string &data) {
+    spdlog::info("OnDescribePlayerSessions Received with raw data: {}", data);
     WebSocketDescribePlayerSessionsResponse *describePlayerSessionsResponse = new WebSocketDescribePlayerSessionsResponse();
     Message *message = describePlayerSessionsResponse;
     message->Deserialize(data);

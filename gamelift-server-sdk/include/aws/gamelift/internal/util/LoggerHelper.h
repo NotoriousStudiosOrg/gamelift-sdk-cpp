@@ -9,33 +9,24 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  *
  */
+#pragma once
 
-#include "gmock/gmock.h"
-#include "gtest/gtest.h"
-#include <aws/gamelift/internal/GameLiftServerState.h>
-#include <iostream>
+#include <string>
 
 namespace Aws {
 namespace GameLift {
-namespace Server {
-namespace Test {
+namespace Internal {
 
-static const std::string sdkVersion = "5.2.0";
-
-TEST(GameLiftServerAPITest, GIVEN_SdkVersion_WHEN_GetSdkVersion_THEN_success) {
-    // GIVEN
-    // WHEN
-    AwsStringOutcome outcome = Server::GetSdkVersion();
-    // THEN
-    ASSERT_TRUE(outcome.IsSuccess());
+class LoggerHelper {
 #ifdef GAMELIFT_USE_STD
-    ASSERT_EQ(outcome.GetResult(), sdkVersion);
+public:
+    static void InitializeLogger(const std::string& process_Id);
 #else
-    ASSERT_STREQ(outcome.GetResult(), sdkVersion.c_str());
+public:
+    static void InitializeLogger(const char* process_Id);
 #endif
-}
+};
 
-} // namespace Test
-} // namespace Server
+} // namespace Internal
 } // namespace GameLift
 } // namespace Aws

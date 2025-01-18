@@ -12,6 +12,7 @@
 
 #include <aws/gamelift/internal/model/message/RefreshConnectionMessage.h>
 #include <aws/gamelift/internal/network/callback/RefreshConnectionCallback.h>
+#include <spdlog/spdlog.h>
 
 using namespace Aws::GameLift;
 
@@ -19,6 +20,7 @@ namespace Aws {
 namespace GameLift {
 namespace Internal {
 GenericOutcome RefreshConnectionCallback::OnRefreshConnection(const std::string &data) {
+    spdlog::info("OnRefreshConnection Received with raw data: {}", data);
     RefreshConnectionMessage refreshConnectionMessage;
     Message &message = refreshConnectionMessage;
     message.Deserialize(data);

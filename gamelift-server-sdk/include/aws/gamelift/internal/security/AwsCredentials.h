@@ -9,24 +9,28 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  *
  */
+#pragma once
 
-#include <aws/gamelift/internal/model/response/WebSocketGetComputeCertificateResponse.h>
-#include <aws/gamelift/internal/network/callback/GetComputeCertificateCallback.h>
-#include <spdlog/spdlog.h>
-
-using namespace Aws::GameLift;
+#include <string>
 
 namespace Aws {
 namespace GameLift {
 namespace Internal {
-GenericOutcome GetComputeCertificateCallback::OnGetComputeCertificateCallback(const std::string &data) {
-    spdlog::info("OnGetComputeCertificate Received");
-    auto *response = new WebSocketGetComputeCertificateResponse();
-    Message *message = response;
-    message->Deserialize(data);
 
-    return GenericOutcome(response);
-}
+class AwsCredentials {
+public:
+    std::string AccessKey;
+    std::string SecretKey;
+    std::string SessionToken;
+
+    AwsCredentials(){}
+
+    AwsCredentials(const std::string &accessKey, const std::string &secretKey,
+                   const std::string &sessionToken) :
+            AccessKey(accessKey), SecretKey(secretKey), SessionToken(sessionToken) {}
+};
+
 } // namespace Internal
 } // namespace GameLift
 } // namespace Aws
+

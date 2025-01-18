@@ -12,6 +12,7 @@
 
 #include <aws/gamelift/internal/model/message/CreateGameSessionMessage.h>
 #include <aws/gamelift/internal/network/callback/CreateGameSessionCallback.h>
+#include <spdlog/spdlog.h>
 
 using namespace Aws::GameLift;
 
@@ -20,6 +21,7 @@ namespace GameLift {
 namespace Internal {
 
 GenericOutcome CreateGameSessionCallback::OnStartGameSession(const std::string &data) {
+    spdlog::info("OnStartGameSession Received with raw data: {}", data);
     CreateGameSessionMessage createGameSessionMessage;
     Message &message = createGameSessionMessage;
     message.Deserialize(data);

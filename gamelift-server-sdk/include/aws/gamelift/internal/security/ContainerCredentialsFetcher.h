@@ -9,24 +9,31 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  *
  */
+#pragma once
 
-#include <aws/gamelift/internal/model/response/WebSocketGetComputeCertificateResponse.h>
-#include <aws/gamelift/internal/network/callback/GetComputeCertificateCallback.h>
-#include <spdlog/spdlog.h>
-
-using namespace Aws::GameLift;
+#include <string>
+#include <aws/gamelift/internal/util/HttpClient.h>
+#include <aws/gamelift/internal/security/AwsCredentials.h>
+#include <aws/gamelift/common/Outcome.h>
 
 namespace Aws {
 namespace GameLift {
 namespace Internal {
-GenericOutcome GetComputeCertificateCallback::OnGetComputeCertificateCallback(const std::string &data) {
-    spdlog::info("OnGetComputeCertificate Received");
-    auto *response = new WebSocketGetComputeCertificateResponse();
-    Message *message = response;
-    message->Deserialize(data);
 
-    return GenericOutcome(response);
-}
+class ContainerCredentialsFetcher {
+private:
+    const std::string ContainerCredentialProviderUrl = "http://169.254.170.2";
+    const std::string EnvironmentVariableContainerCredentialsRelativeUri = "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI";
+
+    HttpClient &httpClient;
+
+public:
+    ContainerCredentialsFetcher(HttpClient &httpClient);
+
+    Aws::GameLift::Outcome<AwsCredentials, std::string> FetchContainerCredentials();
+};
+
 } // namespace Internal
 } // namespace GameLift
 } // namespace Aws
+

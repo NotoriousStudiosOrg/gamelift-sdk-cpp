@@ -73,6 +73,7 @@ private:
     websocketpp::lib::shared_ptr<asio::ssl::context> OnTlsInit(websocketpp::connection_hdl hdl);
     void OnClose(websocketpp::connection_hdl connection);
     void OnError(websocketpp::connection_hdl connection);
+    void OnInterrupt(websocketpp::connection_hdl connection);
 };
 
 } // namespace Internal

@@ -46,16 +46,36 @@ public:
 
 private:
     static constexpr const char *ENV_VAR_WEBSOCKET_URL = "GAMELIFT_SDK_WEBSOCKET_URL";
+    static constexpr const char *ENV_VAR_COMPUTE_TYPE = "GAMELIFT_COMPUTE_TYPE";
     static constexpr const char *ENV_VAR_AUTH_TOKEN = "GAMELIFT_SDK_AUTH_TOKEN";
     static constexpr const char *ENV_VAR_PROCESS_ID = "GAMELIFT_SDK_PROCESS_ID";
     static constexpr const char *ENV_VAR_HOST_ID = "GAMELIFT_SDK_HOST_ID";
     static constexpr const char *ENV_VAR_FLEET_ID = "GAMELIFT_SDK_FLEET_ID";
+    static constexpr const char *ENV_VAR_AWS_REGION = "GAMELIFT_REGION";
+    static constexpr const char *ENV_VAR_ACCESS_KEY = "GAMELIFT_ACCESS_KEY";
+    static constexpr const char *ENV_VAR_SECRET_KEY = "GAMELIFT_SECRET_KEY";
+    static constexpr const char *ENV_VAR_SESSION_TOKEN = "GAMELIFT_SESSION_TOKEN";
+    static constexpr const char *COMPUTE_TYPE_CONTAINER = "CONTAINER";
+    static constexpr const char *AGENTLESS_CONTAINER_PROCESS_ID = "ManagedResource";
 
     static constexpr const int HEALTHCHECK_INTERVAL_MILLIS = 60 * 1000;
     static constexpr const int HEALTHCHECK_MAX_JITTER_MILLIS = 10 * 1000;
     static constexpr const int HEALTHCHECK_TIMEOUT_MILLIS = HEALTHCHECK_INTERVAL_MILLIS - HEALTHCHECK_MAX_JITTER_MILLIS;
 
-    void GetOverrideParams(char **webSocketUrl, char **authToken, char **processId, char **hostId, char **fleetId);
+    void GetOverrideParams(char **webSocketUrl,
+                           char **authToken,
+                           char **processId,
+                           char **hostId,
+                           char **fleetId,
+                           char **computeType,
+                           char **awsRegion,
+                           char **accessKey,
+                           char **secretKey,
+                           char **sessionToken);
+    Outcome<std::map<std::string, std::string>, std::string> GetSigV4QueryParameters(char *awsRegion,
+                           char *accessKey,
+                           char *secretKey,
+                           char *sessionToken);
     void ReportHealth();
     void HealthCheck();
     int GetNextHealthCheckIntervalMillis();
@@ -77,6 +97,8 @@ public:
     GenericOutcome ProcessEnding();
 
     GenericOutcome InitializeNetworking(const Aws::GameLift::Server::Model::ServerParameters &serverParameters);
+
+    GenericOutcome SendSocketMessageWithRetries(Message &message);
 
     GenericOutcome ActivateGameSession();
 
@@ -134,6 +156,8 @@ public:
 
     GenericOutcome InitializeNetworking(const Aws::GameLift::Server::Model::ServerParameters &ServerParameters);
 
+    GenericOutcome SendSocketMessageWithRetries(Message &message);
+
     GenericOutcome ActivateGameSession();
 
     GenericOutcome UpdatePlayerSessionCreationPolicy(PlayerSessionCreationPolicy newPlayerSessionPolicy);
@@ -186,6 +210,7 @@ public:
 
 private:
     bool AssertNetworkInitialized();
+    void SetUpCallbacks();
 
     bool m_processReady;
 
@@ -207,6 +232,8 @@ private:
     std::unique_ptr<StartMatchBackfillCallback> m_startMatchBackfillCallback;
     std::unique_ptr<RefreshConnectionCallback> m_refreshConnectionCallback;
 
+    std::string m_connectionEndpoint;
+    std::string m_authToken;
     std::string m_fleetId;
     std::string m_hostId;
     std::string m_processId;

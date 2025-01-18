@@ -12,6 +12,7 @@
 #include <aws/gamelift/internal/model/WebSocketPlayer.h>
 #include <aws/gamelift/internal/util/JsonHelper.h>
 #include <iostream>
+#include <spdlog/spdlog.h>
 
 namespace Aws {
 namespace GameLift {
@@ -28,6 +29,7 @@ std::string WebSocketPlayer::Serialize() const {
         writer.EndObject();
         return buffer.GetString();
     }
+    spdlog::warn("Could not parse into WebSocketPlayer");
     return "";
 }
 
@@ -35,6 +37,7 @@ bool WebSocketPlayer::Deserialize(const std::string &jsonString) {
     // Parse the json into a document
     rapidjson::Document doc;
     if (doc.Parse(jsonString.c_str()).HasParseError()) {
+        spdlog::error("WebSocketPlayer: Parse error found for: {}", jsonString);
         return false;
     }
 

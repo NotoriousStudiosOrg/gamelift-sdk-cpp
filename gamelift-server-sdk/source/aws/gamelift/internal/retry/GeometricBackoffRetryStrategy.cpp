@@ -12,6 +12,7 @@
 
 #include <aws/gamelift/internal/retry/GeometricBackoffRetryStrategy.h>
 #include <thread>
+#include <spdlog/spdlog.h>
 
 namespace Aws {
 namespace GameLift {
@@ -24,6 +25,7 @@ void GeometricBackoffRetryStrategy::apply(const std::function<bool(void)> &calla
         if (success) {
             break;
         } else {
+            spdlog::warn("Connection Failed. Retrying in {} seconds...", retryIntervalSeconds);
             std::this_thread::sleep_for(std::chrono::seconds(retryIntervalSeconds));
             retryIntervalSeconds *= m_retryFactor;
             retryIntervalSeconds = retryIntervalSeconds > m_maxRetryIntervalSeconds ? m_maxRetryIntervalSeconds : retryIntervalSeconds;

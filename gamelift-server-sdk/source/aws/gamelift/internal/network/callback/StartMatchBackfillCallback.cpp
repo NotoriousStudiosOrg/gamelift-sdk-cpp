@@ -12,6 +12,7 @@
 
 #include <aws/gamelift/internal/model/response/WebSocketStartMatchBackfillResponse.h>
 #include <aws/gamelift/internal/network/callback/StartMatchBackfillCallback.h>
+#include <spdlog/spdlog.h>
 
 using namespace Aws::GameLift;
 
@@ -19,6 +20,7 @@ namespace Aws {
 namespace GameLift {
 namespace Internal {
 GenericOutcome StartMatchBackfillCallback::OnStartMatchBackfill(const std::string &data) {
+    spdlog::info("OnStartMatchBackfill Received with raw data: {}", data);
     WebSocketStartMatchBackfillResponse *startMatchBackfillResponse = new WebSocketStartMatchBackfillResponse();
     Message *message = startMatchBackfillResponse;
     message->Deserialize(data);

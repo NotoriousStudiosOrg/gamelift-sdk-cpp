@@ -4,6 +4,11 @@ PROJECT(aws-cpp-sdk-gamelift-server)
 SET(CMAKE_CXX_STANDARD 11)
 SET(TARGET_NAME aws-cpp-sdk-gamelift-server)
 
+if(MSVC)
+    # Unlock object file size limit
+    add_compile_options(/bigobj)
+endif()
+
 # We need to find the local openssl .dll or .so files BEFORE setting CMAKE_FIND_LIBRARY_SUFFIXES, since openssl will
 # always be dynamically linked. All other libraries used by the SDK may be statically linked, depending on the flags
 # BUILD_FOR_UNREAL and BUILD_SHARED_LIBS.

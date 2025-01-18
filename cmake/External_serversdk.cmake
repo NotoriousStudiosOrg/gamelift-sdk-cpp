@@ -1,7 +1,7 @@
 set(serversdk_source "${CMAKE_CURRENT_SOURCE_DIR}/gamelift-server-sdk")
 set(serversdk_build "${CMAKE_CURRENT_BINARY_DIR}/gamelift-server-sdk")
 
-set(_deps "rapidjson" "websocketpp")
+set(_deps "rapidjson" "websocketpp" "spdlog")
 if (RUN_CLANG_FORMAT)
   list(APPEND _deps "clang-format")
 endif()

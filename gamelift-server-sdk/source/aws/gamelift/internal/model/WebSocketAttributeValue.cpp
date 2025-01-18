@@ -10,6 +10,7 @@
  */
 
 #include <aws/gamelift/internal/model/WebSocketAttributeValue.h>
+#include <spdlog/spdlog.h>
 
 namespace Aws {
 namespace GameLift {
@@ -26,6 +27,7 @@ std::string WebSocketAttributeValue::Serialize() const {
         writer.EndObject();
         return buffer.GetString();
     }
+    spdlog::warn("Could not parse into WebSocketAttributeValue");
     return "";
 }
 
@@ -33,6 +35,7 @@ bool WebSocketAttributeValue::Deserialize(const std::string &jsonString) {
     // Parse the json into a document
     rapidjson::Document doc;
     if (doc.Parse(jsonString.c_str()).HasParseError()) {
+        spdlog::error("WebSocketAttributeValue: Parse error found for: {}", jsonString);
         return false;
     }
 

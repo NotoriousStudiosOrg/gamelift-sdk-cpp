@@ -9,24 +9,28 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  *
  */
+#pragma once
 
-#include <aws/gamelift/internal/model/response/WebSocketGetComputeCertificateResponse.h>
-#include <aws/gamelift/internal/network/callback/GetComputeCertificateCallback.h>
-#include <spdlog/spdlog.h>
-
-using namespace Aws::GameLift;
+#include <string>
+#include <map>
+#include <aws/gamelift/internal/security/AwsCredentials.h>
 
 namespace Aws {
 namespace GameLift {
 namespace Internal {
-GenericOutcome GetComputeCertificateCallback::OnGetComputeCertificateCallback(const std::string &data) {
-    spdlog::info("OnGetComputeCertificate Received");
-    auto *response = new WebSocketGetComputeCertificateResponse();
-    Message *message = response;
-    message->Deserialize(data);
 
-    return GenericOutcome(response);
-}
+struct SigV4Parameters {
+    std::string AwsRegion;
+    AwsCredentials Credentials;
+    std::map <std::string, std::string> QueryParams;
+    std::tm RequestTime;
+
+    SigV4Parameters(const std::string &awsRegion, const class AwsCredentials &awsCredentials,
+                    const std::map <std::string, std::string> &queryParams, const tm &requestTime)
+            :
+            AwsRegion(awsRegion), Credentials(awsCredentials), QueryParams(queryParams),
+            RequestTime(requestTime) {}
+};
 } // namespace Internal
 } // namespace GameLift
 } // namespace Aws

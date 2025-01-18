@@ -15,9 +15,12 @@
 #include <aws/gamelift/server/GameLiftServerAPI.h>
 #include <aws/gamelift/server/ProcessParameters.h>
 
+#include <aws/gamelift/internal/util/LoggerHelper.h>
+#include <spdlog/spdlog.h>
+
 using namespace Aws::GameLift;
 
-static const std::string sdkVersion = "5.1.2";
+static const std::string sdkVersion = "5.2.0";
 
 #ifdef GAMELIFT_USE_STD
 Aws::GameLift::AwsStringOutcome Server::GetSdkVersion() { return AwsStringOutcome(sdkVersion); }
@@ -25,6 +28,8 @@ Aws::GameLift::AwsStringOutcome Server::GetSdkVersion() { return AwsStringOutcom
 Server::InitSDKOutcome Server::InitSDK() { return InitSDK(Aws::GameLift::Server::Model::ServerParameters()); }
 
 Server::InitSDKOutcome Server::InitSDK(const Aws::GameLift::Server::Model::ServerParameters &serverParameters) {
+    Internal::LoggerHelper::InitializeLogger(serverParameters.GetProcessId());
+    spdlog::info("Initializing GameLift SDK");
     // Initialize the WebSocketWrapper
     std::shared_ptr<Internal::IWebSocketClientWrapper> webSocketClientWrapper;
     std::shared_ptr<Internal::WebSocketppClientType> wsClientPointer = std::make_shared<Internal::WebSocketppClientType>();
@@ -32,10 +37,13 @@ Server::InitSDKOutcome Server::InitSDK(const Aws::GameLift::Server::Model::Serve
 
     InitSDKOutcome initOutcome = InitSDKOutcome(Internal::GameLiftServerState::CreateInstance(webSocketClientWrapper));
     if (initOutcome.IsSuccess()) {
+        spdlog::info("Created Instance");
         GenericOutcome networkingOutcome = initOutcome.GetResult()->InitializeNetworking(serverParameters);
         if (!networkingOutcome.IsSuccess()) {
+            spdlog::error("Networking outcome failure when init SDK");
             return InitSDKOutcome(networkingOutcome.GetError());
         }
+        spdlog::info("Networking outcome success. Init SDK success");
     }
     return initOutcome;
 }
@@ -174,14 +182,19 @@ Aws::GameLift::AwsStringOutcome Server::GetSdkVersion() { return AwsStringOutcom
 GenericOutcome Server::InitSDK() { return InitSDK(Aws::GameLift::Server::Model::ServerParameters()); }
 
 GenericOutcome Server::InitSDK(const Aws::GameLift::Server::Model::ServerParameters &serverParameters) {
+    Internal::LoggerHelper::InitializeLogger(serverParameters.GetProcessId());
+    spdlog::info("Initializing GameLift SDK");
     // Initialize the WebSocketWrapper
     Internal::InitSDKOutcome initOutcome =
         Internal::InitSDKOutcome(Internal::GameLiftServerState::CreateInstance<Internal::WebSocketppClientWrapper, Internal::WebSocketppClientType>());
     if (initOutcome.IsSuccess()) {
+        spdlog::info("Created Instance");
         GenericOutcome networkingOutcome = initOutcome.GetResult()->InitializeNetworking(serverParameters);
         if (!networkingOutcome.IsSuccess()) {
+            spdlog::error("Networking outcome failure when init SDK");
             return GenericOutcome(networkingOutcome.GetError());
         }
+        spdlog::info("Networking outcome success. Init SDK success");
     }
     return GenericOutcome(nullptr);
 }

@@ -9,24 +9,31 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  *
  */
+#pragma once
 
-#include <aws/gamelift/internal/model/response/WebSocketGetComputeCertificateResponse.h>
-#include <aws/gamelift/internal/network/callback/GetComputeCertificateCallback.h>
-#include <spdlog/spdlog.h>
-
-using namespace Aws::GameLift;
+#include <string>
+#include <aws/gamelift/internal/util/HttpClient.h>
+#include <aws/gamelift/internal/security/ContainerTaskMetadata.h>
+#include <aws/gamelift/common/Outcome.h>
 
 namespace Aws {
 namespace GameLift {
 namespace Internal {
-GenericOutcome GetComputeCertificateCallback::OnGetComputeCertificateCallback(const std::string &data) {
-    spdlog::info("OnGetComputeCertificate Received");
-    auto *response = new WebSocketGetComputeCertificateResponse();
-    Message *message = response;
-    message->Deserialize(data);
 
-    return GenericOutcome(response);
-}
+class ContainerMetadataFetcher {
+private:
+    const std::string EnvironmentVariableContainerMetadataUri = "ECS_CONTAINER_METADATA_URI_V4";
+    const std::string TaskMetadataRelativePath = "task";
+
+    HttpClient &httpClient;
+
+public:
+    ContainerMetadataFetcher(HttpClient &httpClient);
+
+    Aws::GameLift::Outcome<ContainerTaskMetadata, std::string> FetchContainerTaskMetadata();
+};
+
 } // namespace Internal
 } // namespace GameLift
 } // namespace Aws
+

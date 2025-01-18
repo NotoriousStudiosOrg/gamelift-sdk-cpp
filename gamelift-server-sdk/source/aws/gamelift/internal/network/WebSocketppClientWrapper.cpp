@@ -16,6 +16,7 @@
 #include <aws/gamelift/internal/retry/RetryingCallable.h>
 #include <memory>
 #include <websocketpp/error.hpp>
+#include <spdlog/spdlog.h>
 
 namespace Aws {
 namespace GameLift {
@@ -70,6 +71,7 @@ WebSocketppClientWrapper::WebSocketppClientWrapper(std::shared_ptr<WebSocketppCl
     m_webSocketClient->set_message_handler(std::bind(&WebSocketppClientWrapper::OnMessage, this, _1, _2));
     m_webSocketClient->set_fail_handler(std::bind(&WebSocketppClientWrapper::OnError, this, _1));
     m_webSocketClient->set_close_handler(std::bind(&WebSocketppClientWrapper::OnClose, this, _1));
+    m_webSocketClient->set_interrupt_handler(std::bind(&WebSocketppClientWrapper::OnInterrupt, this, _1));
 }
 
 WebSocketppClientWrapper::~WebSocketppClientWrapper() {
@@ -78,6 +80,7 @@ WebSocketppClientWrapper::~WebSocketppClientWrapper() {
         m_webSocketClient->stop_perpetual();
     }
 
+    spdlog::info("Destroying WebsocketPPClientWraper");
     // close connections and join the thread
     if (m_connection && m_connection->get_state() == websocketpp::session::state::open) {
         Disconnect();
@@ -91,6 +94,7 @@ WebSocketppClientWrapper::~WebSocketppClientWrapper() {
 }
 
 GenericOutcome WebSocketppClientWrapper::Connect(const Uri &uri) {
+    spdlog::info("Opening Connection");
     // Perform connection with retries.
     // This attempts to start up a new websocket connection / thread
     m_uri = uri;
@@ -99,20 +103,26 @@ GenericOutcome WebSocketppClientWrapper::Connect(const Uri &uri) {
     RetryingCallable callable = RetryingCallable::Builder()
                                     .WithRetryStrategy(&retryStrategy)
                                     .WithCallable([this, &uri, &errorCode] {
+                                        spdlog::info("Attempting to perform connection");
                                         WebSocketppClientType::connection_ptr newConnection = PerformConnect(uri, errorCode);
                                         if (newConnection && newConnection->get_state() == websocketpp::session::state::open) {
+                                            spdlog::info("Connection established, transitioning traffic");
                                             // "Flip" traffic from our old websocket to our new websocket. Close the old one
                                             // if necessary
                                             WebSocketppClientType::connection_ptr oldConnection = m_connection;
                                             m_connection = newConnection;
                                             if (oldConnection && oldConnection->get_state() == websocketpp::session::state::open) {
+                                                spdlog::info("Closing previous connection");
                                                 websocketpp::lib::error_code closeErrorCode;
                                                 m_webSocketClient->close(oldConnection->get_handle(), websocketpp::close::status::going_away,
                                                                          "Websocket client reconnecting", closeErrorCode);
+                                                if (errorCode.value()) {
+                                                    spdlog::warn("Failed to close old websocket after a connection refresh, ignoring.");
+                                                }
                                             }
                                             return true;
                                         } else {
-                                            printf("Connection to GameLift websocket server failed. Retrying connection if possible.\n");
+                                            spdlog::warn("Connection to GameLift websocket server failed. Retrying connection if possible.");
                                             return false;
                                         }
                                     })
@@ -120,9 +130,10 @@ GenericOutcome WebSocketppClientWrapper::Connect(const Uri &uri) {
     callable.call();
 
     if (IsConnected()) {
+        spdlog::info("Connected to endpoint");
         return GenericOutcome(nullptr);
     } else {
-        printf("Connection to GameLift websocket server failed. See error message in InitSDK() outcome for details.\n");
+        spdlog::error("Connection to GameLift websocket server failed. See error message in InitSDK() outcome for details.");
         m_connection = nullptr;
         switch (errorCode.value()) {
         case websocketpp::error::server_only:
@@ -170,24 +181,41 @@ GenericOutcome WebSocketppClientWrapper::Connect(const Uri &uri) {
 }
 
 WebSocketppClientType::connection_ptr WebSocketppClientWrapper::PerformConnect(const Uri &uri, websocketpp::lib::error_code &errorCode) {
+    spdlog::info("Performing connection");
     errorCode.clear();
     // Create connection request
     WebSocketppClientType::connection_ptr newConnection = m_webSocketClient->get_connection(uri.GetUriString(), errorCode);
     if (errorCode.value()) {
+        spdlog::error("Failed to GetConnection. ERROR: {}", errorCode.message());
         return newConnection;
+    } else {
+        spdlog::info("Connection request created successfully. Waiting for connection to establish...");
     }
 
     // Queue a new connection request (the socket thread will act on it and attempt to connect)
-    m_webSocketClient->connect(newConnection);
-
+    try {
+        m_webSocketClient->connect(newConnection);
+    }
+    catch (const std::exception& e) {
+        spdlog::error("Exception while trying to connect with the webSocketClient: {}", e.what());
+    }
+    spdlog::info("Connection request queued.");
     // Wait for connection to succeed or fail (this makes connection synchronous)
     {
         std::unique_lock<std::mutex> lk(m_lock);
         m_cond.wait(lk, [this] { return m_connectionStateChanged; });
+        spdlog::info("Connection state changed: {}", m_fail_error_code.message());
         errorCode = m_fail_error_code;
         // Reset
         m_connectionStateChanged = false;
         m_fail_error_code.clear();
+    }
+
+    if (errorCode.value()) {
+        spdlog::error("Connection failed with errorCode: {}", errorCode.message());
+    }
+    else {
+        spdlog::info("Connection established successfully.");
     }
 
     return newConnection;
@@ -195,6 +223,7 @@ WebSocketppClientType::connection_ptr WebSocketppClientWrapper::PerformConnect(c
 
 GenericOutcome WebSocketppClientWrapper::SendSocketMessage(const std::string &requestId, const std::string &message) {
     if (requestId.empty()) {
+        spdlog::error("Request does not have request ID, cannot process");
         return GenericOutcome(GameLiftError(GAMELIFT_ERROR_TYPE::INTERNAL_SERVICE_EXCEPTION));
     }
 
@@ -202,8 +231,11 @@ GenericOutcome WebSocketppClientWrapper::SendSocketMessage(const std::string &re
     while(!IsConnected()) {
         // m_connection will be null if reconnect failed after max reties
         if(m_connection == nullptr || ++waitForReconnectRetryCount >= WAIT_FOR_RECONNECT_MAX_RETRIES) {
+            spdlog::warn("WebSocket is not connected... WebSocket failed to send message due to an error.");
             return GenericOutcome(GameLiftError(GAMELIFT_ERROR_TYPE::WEBSOCKET_SEND_MESSAGE_FAILURE));
         }
+        spdlog::warn("WebSocket is not connected... isConnected: {}, remoteEndpoint: {}, host: {}, port: {}",
+                IsConnected(), m_connection->get_remote_endpoint(), m_connection->get_host(), m_connection->get_port());
         std::this_thread::sleep_for(std::chrono::seconds(WAIT_FOR_RECONNECT_RETRY_DELAY_SECONDS));
     }
 
@@ -213,6 +245,7 @@ GenericOutcome WebSocketppClientWrapper::SendSocketMessage(const std::string &re
         std::lock_guard<std::mutex> lock(m_requestToPromiseLock);
         // This indicates we've already sent this message, and it's still in flight
         if (m_requestIdToPromise.count(requestId) > 0) {
+            spdlog::error("Request {} already exists", requestId);
             return GenericOutcome(GameLiftError(GAMELIFT_ERROR_TYPE::BAD_REQUEST_EXCEPTION));
         }
 
@@ -224,6 +257,8 @@ GenericOutcome WebSocketppClientWrapper::SendSocketMessage(const std::string &re
     GenericOutcome immediateResponse = SendSocketMessageAsync(message);
 
     if (!immediateResponse.IsSuccess()) {
+        spdlog::error("Send Socket Message immediate response failed with error {}: {}",
+                      immediateResponse.GetError().GetErrorName(), immediateResponse.GetError().GetErrorMessage());
         std::lock_guard<std::mutex> lock(m_requestToPromiseLock);
         m_requestIdToPromise.erase(requestId);
         return immediateResponse;
@@ -233,6 +268,9 @@ GenericOutcome WebSocketppClientWrapper::SendSocketMessage(const std::string &re
 
     if (promiseStatus == std::future_status::timeout) {
         std::lock_guard<std::mutex> lock(m_requestToPromiseLock);
+        spdlog::error("Response not received within the time limit of {} ms for request {}", SERVICE_CALL_TIMEOUT_MILLIS, requestId);
+        spdlog::warn("isConnected: {}, remoteEndpoint: {}, host: {}, port: {}", IsConnected(),
+                     m_connection->get_remote_endpoint(), m_connection->get_host(), m_connection->get_port());
         m_requestIdToPromise.erase(requestId);
         // If a call times out, retry
         return GenericOutcome(GameLiftError(GAMELIFT_ERROR_TYPE::WEBSOCKET_RETRIABLE_SEND_MESSAGE_FAILURE));
@@ -242,9 +280,12 @@ GenericOutcome WebSocketppClientWrapper::SendSocketMessage(const std::string &re
 }
 
 GenericOutcome WebSocketppClientWrapper::SendSocketMessageAsync(const std::string &message) {
+    spdlog::info("Sending Socket Message, isConnected:{}, endpoint: {}, host: {}, port: {}", IsConnected(),
+                 m_connection->get_remote_endpoint(), m_connection->get_host(), m_connection->get_port());
     websocketpp::lib::error_code errorCode;
     m_webSocketClient->send(m_connection->get_handle(), message.c_str(), websocketpp::frame::opcode::text, errorCode);
     if (errorCode.value()) {
+        spdlog::error("Error Sending Socket Message: {}", errorCode.value());
         switch (errorCode.value()) {
         case websocketpp::error::no_outgoing_buffers:
             // If buffers are full, send will fail. Retryable since buffers can free up as messages
@@ -259,14 +300,19 @@ GenericOutcome WebSocketppClientWrapper::SendSocketMessageAsync(const std::strin
 }
 
 void WebSocketppClientWrapper::Disconnect() {
+    spdlog::info("Disconnecting WebSocket");
     if (m_connection != nullptr) {
         websocketpp::lib::error_code ec;
         m_webSocketClient->close(m_connection->get_handle(), websocketpp::close::status::going_away, "Websocket client closing", ec);
+        if (ec) {
+	        spdlog::error("Error initiating close: {}",ec.message());
+        }
         m_connection = nullptr;
     }
 }
 
 void WebSocketppClientWrapper::RegisterGameLiftCallback(const std::string &gameLiftEvent, const std::function<GenericOutcome(std::string)> &callback) {
+    spdlog::info("Registering GameLift CallBack for: {}", gameLiftEvent);
     m_eventHandlers[gameLiftEvent] = callback;
 }
 
@@ -276,6 +322,7 @@ bool WebSocketppClientWrapper::IsConnected() {
 }
 
 void WebSocketppClientWrapper::OnConnected(websocketpp::connection_hdl connection) {
+    spdlog::info("Connected to WebSocket");
     // aquire lock and set condition variables (let main thread know connection is successful)
     {
         std::lock_guard<std::mutex> lk(m_lock);
@@ -287,6 +334,7 @@ void WebSocketppClientWrapper::OnConnected(websocketpp::connection_hdl connectio
 
 void WebSocketppClientWrapper::OnError(websocketpp::connection_hdl connection) {
     auto con = m_webSocketClient->get_con_from_hdl(connection);
+    spdlog::error("Error Connecting to WebSocket");
 
     // aquire lock and set condition variables (let main thread know an error has occurred)
     {
@@ -301,14 +349,18 @@ void WebSocketppClientWrapper::OnError(websocketpp::connection_hdl connection) {
 
 void WebSocketppClientWrapper::OnMessage(websocketpp::connection_hdl connection, websocketpp::config::asio_client::message_type::ptr msg) {
     std::string message = msg->get_payload();
+    spdlog::info("Received message from websocket endpoint: {}, host: {}, port: {}",
+                 m_connection->get_remote_endpoint(), m_connection->get_host(), m_connection->get_port());
 
     ResponseMessage responseMessage;
     Message &gameLiftMessage = responseMessage;
     if (!gameLiftMessage.Deserialize(message)) {
+        spdlog::error("Error Deserializing Message");
         return;
     }
 
     const std::string &action = responseMessage.GetAction();
+    spdlog::info("Deserialized Message has Action: {}", action);
     const std::string &requestId = responseMessage.GetRequestId();
     const int statusCode = responseMessage.GetStatusCode();
     const std::string &errorMessage = responseMessage.GetErrorMessage();
@@ -324,6 +376,7 @@ void WebSocketppClientWrapper::OnMessage(websocketpp::connection_hdl connection,
         // If we got a success response, and we have a special event handler for this action, invoke
         // it to get the real parsed result
         if (m_eventHandlers.count(action)) {
+            spdlog::info("Executing GameLift Event Handler for {}", action);
             response = m_eventHandlers[action](message);
         }
     }
@@ -349,16 +402,25 @@ void WebSocketppClientWrapper::OnClose(websocketpp::connection_hdl connection) {
                            || localCloseCode == websocketpp::close::status::going_away
                            || remoteCloseCode == websocketpp::close::status::normal
                            || remoteCloseCode == websocketpp::close::status::going_away;
-    printf("Connection to GameLift websocket server lost, Local Close Code = %s, Remote Close Code = %s.\n",
+    spdlog::info("Connection to GameLift websocket server lost, Local Close Code = {}, Remote Close Code = {}.",
            websocketpp::close::status::get_string(localCloseCode).c_str(),
            websocketpp::close::status::get_string(remoteCloseCode).c_str());
     if(isNormalClosure) {
-        printf("Normal Connection Closure, skipping reconnect.\n");
+        spdlog::info("Normal Connection Closure, skipping reconnect.");
         return;
     } else {
-        printf("Abnormal Connection Closure, reconnecting.\n");
+        spdlog::info("Abnormal Connection Closure, reconnecting.");
         WebSocketppClientWrapper::Connect(m_uri);
     }
+}
+
+void WebSocketppClientWrapper::OnInterrupt(websocketpp::connection_hdl connection) {
+    auto connectionPointer = m_webSocketClient->get_con_from_hdl(connection);
+    auto remoteEndpoint = connectionPointer->get_remote_endpoint();
+    auto host = connectionPointer->get_host();
+    auto port = connectionPointer->get_port();
+    spdlog::warn("Interruption Happened");
+    spdlog::info("In OnInterrupt(), isConnected:{}, endpoint: {}, host: {}, port: {}", IsConnected(), remoteEndpoint, host, port);
 }
 
 } // namespace Internal

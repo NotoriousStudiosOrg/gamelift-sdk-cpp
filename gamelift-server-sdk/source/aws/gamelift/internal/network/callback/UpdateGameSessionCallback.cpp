@@ -12,6 +12,7 @@
 
 #include <aws/gamelift/internal/model/message/UpdateGameSessionMessage.h>
 #include <aws/gamelift/internal/network/callback/UpdateGameSessionCallback.h>
+#include <spdlog/spdlog.h>
 
 using namespace Aws::GameLift;
 
@@ -20,6 +21,7 @@ namespace GameLift {
 namespace Internal {
 
 GenericOutcome UpdateGameSessionCallback::OnUpdateGameSession(const std::string &data) {
+    spdlog::info("OnUpdateGameSession Received with raw data: {}", data);
     UpdateGameSessionMessage updateGameSessionMessage;
     Message &message = updateGameSessionMessage;
     message.Deserialize(data);

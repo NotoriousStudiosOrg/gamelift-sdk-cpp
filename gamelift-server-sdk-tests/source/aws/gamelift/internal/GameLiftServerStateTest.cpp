@@ -135,6 +135,22 @@ TEST_F(GameLiftServerStateTest, GIVEN_connectedWebSocketClient_WHEN_processReady
     EXPECT_TRUE(outcome.IsSuccess());
 }
 
+TEST_F(GameLiftServerStateTest, GIVEN_errorResponseFromActivateServerProcess_WHEN_processReady_THEN_outcomeFailed) {
+    const GameLiftError expectedError = GameLiftError(400, "test error");
+    
+    // GIVEN
+    EXPECT_CALL(*mockWebSocketClientWrapper, IsConnected()).WillOnce(testing::Return(true));
+    EXPECT_CALL(*mockWebSocketClientWrapper, SendSocketMessage(testing::_, HasAction("ActivateServerProcess")))
+        .WillOnce(testing::Return(GenericOutcome(expectedError)));
+
+    // WHEN
+    GenericOutcome outcome = CallProcessReady();
+
+    // THEN
+    EXPECT_FALSE(outcome.IsSuccess());
+    EXPECT_EQ(expectedError, outcome.GetError());
+}
+
 TEST_F(GameLiftServerStateTest, GIVEN_nonConnectedWebSocketClient_WHEN_processReady_THEN_notInitializedError) {
     // GIVEN
     EXPECT_CALL(*mockWebSocketClientWrapper, IsConnected()).WillOnce(testing::Return(false));
@@ -289,6 +305,8 @@ TEST_F(GameLiftServerStateTest, GIVEN_noProcessReady_WHEN_ActivateGameSession_TH
 TEST_F(GameLiftServerStateTest, GIVEN_processReadyButNoLongerConnected_WHEN_ActivateGameSession_THEN_outcomeFailed) {
     // GIVEN
     EXPECT_CALL(*mockWebSocketClientWrapper, IsConnected()).WillOnce(testing::Return(true)).WillOnce(testing::Return(false));
+    EXPECT_CALL(*mockWebSocketClientWrapper, SendSocketMessage(testing::_, HasAction("ActivateServerProcess")))
+        .WillOnce(testing::Return(GenericOutcome(nullptr)));
 
     // WHEN
     CallProcessReady();
@@ -809,6 +827,22 @@ TEST_F(GameLiftServerStateTest, GIVEN_connectedProcessAndReadyButRefreshFails_WH
     serverState->OnRefreshConnection("newEndpoint", "newToken");
 
     // THEN - No errors
+}
+
+TEST_F(GameLiftServerStateTest, GIVEN_retriable_failure_WHEN_sendMessage_THEN_retry) {
+    // GIVEN
+    Message message;
+    std::stringstream ss;
+    ss << "{\"RequestId\":\"" << message.GetRequestId() << "\"}";
+    std::string expectedJsonMessage = ss.str();
+    // EXPECT
+    EXPECT_CALL(*mockWebSocketClientWrapper, SendSocketMessage(message.GetRequestId(), expectedJsonMessage))
+    .WillOnce(testing::Return(GenericOutcome(GAMELIFT_ERROR_TYPE::WEBSOCKET_RETRIABLE_SEND_MESSAGE_FAILURE)))
+    .WillOnce(testing::Return(GenericOutcome(nullptr)));
+    // WHEN
+    GenericOutcome outcome = serverState->SendSocketMessageWithRetries(message);
+    // THEN
+    ASSERT_TRUE(outcome.IsSuccess());
 }
 } // namespace Test
 } // namespace Internal

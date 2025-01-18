@@ -18,7 +18,7 @@ namespace GameLift {
 namespace Internal {
 namespace Test {
 
-static const std::string sdkVersion = "5.1.2";
+static const std::string sdkVersion = "5.2.0";
 
 class GameLiftWebSocketClientManagerTest : public ::testing::Test {
 protected:
@@ -110,22 +110,6 @@ TEST_F(GameLiftWebSocketClientManagerTest, GIVEN_clientManager_WHEN_sendMessage_
     // connect first to set connection variables
     GenericOutcome outcome = clientManager->Connect(testUrl, testAuthToken, testProcessId, testHostId, testFleetId);
     outcome = clientManager->SendSocketMessage(message);
-    // THEN
-    ASSERT_TRUE(outcome.IsSuccess());
-}
-
-TEST_F(GameLiftWebSocketClientManagerTest, GIVEN_retriable_failure_WHEN_sendMessage_THEN_retry) {
-    // GIVEN
-    Message message;
-    std::stringstream ss;
-    ss << "{\"RequestId\":\"" << message.GetRequestId() << "\"}";
-    std::string expectedJsonMessage = ss.str();
-    // EXPECT
-    EXPECT_CALL(*mockWebSocketClientWrapper, SendSocketMessage(message.GetRequestId(), expectedJsonMessage))
-        .WillOnce(testing::Return(GenericOutcome(GAMELIFT_ERROR_TYPE::WEBSOCKET_RETRIABLE_SEND_MESSAGE_FAILURE)))
-        .WillOnce(testing::Return(GenericOutcome(nullptr)));
-    // WHEN
-    GenericOutcome outcome = clientManager->SendSocketMessage(message);
     // THEN
     ASSERT_TRUE(outcome.IsSuccess());
 }

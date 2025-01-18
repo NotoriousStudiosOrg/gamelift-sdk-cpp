@@ -12,6 +12,7 @@
 
 #include <aws/gamelift/internal/model/message/TerminateProcessMessage.h>
 #include <aws/gamelift/internal/network/callback/TerminateProcessCallback.h>
+#include <spdlog/spdlog.h>
 
 using namespace Aws::GameLift;
 
@@ -20,6 +21,7 @@ namespace GameLift {
 namespace Internal {
 
 GenericOutcome TerminateProcessCallback::OnTerminateProcess(const std::string &data) {
+    spdlog::info("OnTerminateProcess Received with raw data: {}", data);
     TerminateProcessMessage terminateProcessMessage;
     Message &message = terminateProcessMessage;
     message.Deserialize(data);

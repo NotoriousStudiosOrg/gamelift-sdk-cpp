@@ -35,7 +35,7 @@ public:
     inline bool IsConnected() { return m_webSocketClientWrapper->IsConnected(); }
 
     Aws::GameLift::GenericOutcome Connect(std::string websocketUrl, const std::string &authToken, const std::string &processId, const std::string &hostId,
-                                          const std::string &fleetId);
+                                          const std::string &fleetId, const std::map<std::string, std::string> &sigV4QueryParameters = {});
     // Messages are synchronously sent and a response is waited for.
     GenericOutcome SendSocketMessage(Message &message);
     void Disconnect();
